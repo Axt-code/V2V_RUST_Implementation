@@ -30,10 +30,10 @@ fn main() {
         &mut rng, &g2, &x2, &y_id, &y_epoch, &y_k1, &id, &epoch, &mut set,
     ) {
         Some((sigma_i, updated_set)) => {
-            println!("Issue successful.\n");
-            println!("sigma: {:?}\n", sigma);
-            println!("Updated set: {:?}\n", updated_set);
             sigma = Some(sigma_i);
+            println!("Issue successful.\n");
+            // println!("sigma: {:?}\n", sigma);
+            println!("Updated set: {:?}\n", updated_set);
         }
         None => {
             println!("The key (id, epoch) was already present in the map. Exiting function early.");
@@ -48,7 +48,7 @@ fn main() {
         println!("Verification result: {:?}", result);
         if result {
             cred = Some((id.clone(), epoch.clone(), s));
-            println!("\nVerification Success Cred : {:?}", cred);
+            println!("\nVerification Successfull Cred generated");
         } else {
             println!("Verification Failed\n");
         }
@@ -70,6 +70,7 @@ fn main() {
         sigma_1_dash = Some(s1_dash);
         sigma_2_dash = Some(s2_dash);
         pie = p;
+        println!("Token Generated");
     } else {
         println!("Error: sigma was not successfully generated.");
     }

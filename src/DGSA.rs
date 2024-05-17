@@ -29,15 +29,15 @@ pub fn keygen(rng: &mut XorShiftRng, k: usize) -> (G2, Fr, Fr, Fr, Fr, G2, G2, G
 
     // SET
     println!("{}", { "\nKEY GENERATION......\n" });
-    util::print_g2("g2", &g2);
-    util::print_fr("x2", &x2);
-    util::print_fr("y_id", &y_id);
-    util::print_fr("y_epoch", &y_epoch);
-    util::print_fr("y_k1", &y_k1);
-    util::print_g2("X2", &X2);
-    util::print_g2("Y_id", &Y_id);
-    util::print_g2("Y_epoch", &Y_epoch);
-    util::print_g2("Y_k1", &Y_K1);
+    // util::print_g2("g2", &g2);
+    // util::print_fr("x2", &x2);
+    // util::print_fr("y_id", &y_id);
+    // util::print_fr("y_epoch", &y_epoch);
+    // util::print_fr("y_k1", &y_k1);
+    // util::print_g2("X2", &X2);
+    // util::print_g2("Y_id", &Y_id);
+    // util::print_g2("Y_epoch", &Y_epoch);
+    // util::print_g2("Y_k1", &Y_K1);
     (g2, x2, y_id, y_epoch, y_k1, X2, Y_id, Y_epoch, Y_K1)
 }
 pub fn issue_i<'a>(
@@ -57,7 +57,7 @@ pub fn issue_i<'a>(
         println!("The key (id, epoch) is present in the map.");
         return None; // Exit the function early if the key is present
     } else {
-        println!("The key (id, epoch) is not present in the map.");
+        // println!("The key (id, epoch) is not present in the map.");
         set.insert((*id, *epoch), a_dash.clone());
     }
 
@@ -77,10 +77,10 @@ pub fn issue_i<'a>(
     let sigma = (a_dash, h, sigma_2);
 
     println!("{}", { "\nISSUE_I......\n" });
-    util::print_fr("a_dash", &a_dash);
-    util::print_g1("h", &h);
-    util::print_fr("pw", &pw);
-    util::print_g1("sigma_2", &sigma_2);
+    // util::print_fr("a_dash", &a_dash);
+    // util::print_g1("h", &h);
+    // util::print_fr("pw", &pw);
+    // util::print_g1("sigma_2", &sigma_2);
 
     Some((sigma, set.clone()))
 }
@@ -109,9 +109,9 @@ pub fn issue_u(
     let pair2 = util::do_pairing(&sigma_2.into_affine(), &g2.into_affine());
 
     println!("{}", { "\nISSUE_U......\n" });
-    util::print_g2("XYY", &XYY);
-    util::print_gt("pair1", &pair1);
-    util::print_gt("pair2", &pair2);
+    // util::print_g2("XYY", &XYY);
+    // util::print_gt("pair1", &pair1);
+    // util::print_gt("pair2", &pair2);
     pair1 == pair2
 }
 
@@ -173,9 +173,9 @@ pub fn auth(
 
     // Output the results
     println!("{}", { "\nAUTH......\n" });
-    util::print_g1("sigma_1_dash", &sigma_1_dash);
-    util::print_g1("sigma_2_dash", &sigma_2_dash);
-    println!("pie: {:?}\n", pie);
+    // util::print_g1("sigma_1_dash", &sigma_1_dash);
+    // util::print_g1("sigma_2_dash", &sigma_2_dash);
+    // println!("pie: {:?}\n", pie);
     token
 }
 
@@ -226,7 +226,7 @@ pub fn Vf(
 
     let u1 = util::mul_fq12_fq12(p1, util::mul_fq12_fq12(p2, util::mul_fq12_fq12(p3, p4)));
 
-    println!("u1: {:?}\n", u1);
+    // println!("u1: {:?}\n", u1);
 
     let c1 = util::combine_to_fr(
         &u1,
@@ -239,21 +239,6 @@ pub fn Vf(
         &Y_id,
         &Y_K1,
     );
-
-    // let m1 = 123;
-    // let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    // let g2r = util::gen_random_g2(&mut rng);
-    // let c2 = util::combine_to_fr(
-    //     &u1,
-    //     &epoch_fr,
-    //     &m1,
-    //     &sigma_1_dash,
-    //     &sigma_2_dash,
-    //     X2,
-    //     &Y_epoch,
-    //     &Y_id,
-    //     &Y_K1,
-    // );
 
     println!("{}", { "\nVF......\n" });
 
