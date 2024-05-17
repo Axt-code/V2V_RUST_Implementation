@@ -14,11 +14,12 @@ pub fn generate_key() -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
 // Function to encrypt a message
 pub fn encrypt(
     cipher: &Aes128GcmSiv,
-    nonce: &GenericArray<u8, <Aes128GcmSiv as Aead>::NonceSize>,
-    plaintext: &[u8],
+    Kp: &GenericArray<u8, <Aes128GcmSiv as Aead>::NonceSize>,
+    payload: &str,
 ) -> Vec<u8> {
+    let payload_bytes = payload.as_bytes();
     cipher
-        .encrypt(nonce, plaintext.as_ref())
+        .encrypt(Kp, payload_bytes.as_ref())
         .expect("encryption failure!")
 }
 
