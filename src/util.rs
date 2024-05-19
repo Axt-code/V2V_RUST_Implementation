@@ -2,19 +2,14 @@ extern crate blake2;
 extern crate byteorder;
 extern crate pairing;
 extern crate rand;
-use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
 
-use aes_gcm_siv::{Aes128GcmSiv, AesGcmSiv};
+use aes_gcm_siv::aead::{generic_array::GenericArray, NewAead};
+use aes_gcm_siv::Aes128GcmSiv;
 use bit_vec::BitVec;
-use blake2::{Blake2b, Blake2s};
-use byteorder::{BigEndian, ByteOrder, NativeEndian, ReadBytesExt};
 use pairing::bls12_381::*;
 use pairing::*;
-use rand::chacha::ChaChaRng;
-use rand::{Rand, Rng, SeedableRng, XorShiftRng};
+use rand::{Rand, XorShiftRng};
 use sha2::*;
-use std::fmt;
-use std::time::{Duration, Instant};
 
 pub fn do_pairing(g_1: &G1Affine, g_2: &G2Affine) -> Fq12 {
     Bls12::final_exponentiation(&Bls12::miller_loop([&(

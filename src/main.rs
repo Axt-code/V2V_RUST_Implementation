@@ -3,9 +3,6 @@ extern crate pairing;
 extern crate rand;
 extern crate sha2;
 
-use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
-
-use aes_gcm_siv::{Aes128GcmSiv, AesGcmSiv};
 use bit_vec::BitVec;
 use pairing::bls12_381::{G2Affine, G2};
 use pairing::{CurveAffine, CurveProjective};

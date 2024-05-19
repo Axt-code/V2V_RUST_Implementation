@@ -7,10 +7,9 @@ extern crate rand;
 use bit_vec::BitVec;
 use pairing::bls12_381::*;
 use pairing::*;
-use rand::{Rand, Rng, SeedableRng, XorShiftRng};
+use rand::{Rand, XorShiftRng};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
-use std::time::{Duration, Instant};
 
 pub fn do_pairing(g_1: &G1Affine, g_2: &G2Affine) -> Fq12 {
     Bls12::final_exponentiation(&Bls12::miller_loop([&(

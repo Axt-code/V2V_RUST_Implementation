@@ -3,18 +3,9 @@ extern crate byteorder;
 extern crate pairing;
 extern crate rand;
 
-use aes_gcm_siv::aead::Payload;
-use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
-use aes_gcm_siv::Aes128GcmSiv;
-
-use blake2::digest::KeyInit;
-// AES-256-GCM-SIV
-use generic_array::typenum::U12;
-use pairing::bls12_381::{Fr, G2Affine, G2};
+use pairing::bls12_381::{Fr, G2};
 use pairing::CurveProjective;
-use rand::{Rng, XorShiftRng};
-use sha2::digest::generic_array;
-use sha2::{Digest, Sha256};
+use rand::XorShiftRng;
 
 mod util;
 

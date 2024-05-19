@@ -2,12 +2,9 @@ extern crate aes_gcm_siv;
 extern crate rand;
 extern crate sha2;
 
-use aes_gcm_siv::aead::Payload;
 use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
 use aes_gcm_siv::Aes128GcmSiv; // AES-256-GCM-SIV
-use generic_array::typenum::U12;
 use pairing::bls12_381::G2;
-use rand::Rng;
 use sha2::digest::generic_array;
 use sha2::{Digest, Sha256};
 

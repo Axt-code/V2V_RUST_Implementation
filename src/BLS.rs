@@ -3,14 +3,9 @@ extern crate byteorder;
 extern crate pairing;
 extern crate rand;
 
-use blake2::{Blake2b, Blake2s, Digest};
-use byteorder::{BigEndian, ByteOrder, NativeEndian, ReadBytesExt};
 use pairing::bls12_381::*;
 use pairing::*;
-use rand::chacha::ChaChaRng;
-use rand::{Rand, Rng, SeedableRng, XorShiftRng};
-use std::fmt;
-use std::time::{Duration, Instant};
+use rand::XorShiftRng;
 
 mod util;
 
