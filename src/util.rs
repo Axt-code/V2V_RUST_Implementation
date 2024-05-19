@@ -2,15 +2,18 @@ extern crate blake2;
 extern crate byteorder;
 extern crate pairing;
 extern crate rand;
+use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
 
-use blake2::{Blake2b, Blake2s, Digest};
+use aes_gcm_siv::{Aes128GcmSiv, AesGcmSiv};
+use bit_vec::BitVec;
+use blake2::{Blake2b, Blake2s};
 use byteorder::{BigEndian, ByteOrder, NativeEndian, ReadBytesExt};
 use pairing::bls12_381::*;
 use pairing::*;
 use rand::chacha::ChaChaRng;
 use rand::{Rand, Rng, SeedableRng, XorShiftRng};
+use sha2::*;
 use std::fmt;
-use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 pub fn do_pairing(g_1: &G1Affine, g_2: &G2Affine) -> Fq12 {
@@ -132,4 +135,39 @@ pub fn print_gt(a: &Fq12) -> () {
 
 pub fn int_to_fr(i: &u128) -> Fr {
     Fr::from_str(&i.to_string()).unwrap()
+}
+
+pub fn convert_to_bits(bytes: &[u8]) -> BitVec {
+    let mut bits = BitVec::new();
+    for &byte in bytes {
+        for i in 0..8 {
+            bits.push((byte >> (7 - i)) & 1 == 1);
+        }
+    }
+    bits
+}
+
+pub fn g2_to_bits(g2: &G2) -> BitVec {
+    let mut bits = BitVec::new();
+    let affine = g2.into_affine();
+    let compressed = affine.into_compressed().as_ref().to_vec();
+    bits.extend(convert_to_bits(&compressed));
+    bits
+}
+
+/// Hashes an element in G2 to a GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize>
+pub fn hash_g2_to_aes_key(g2: &G2) -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
+    let bits = g2_to_bits(g2);
+    let element_bytes: Vec<u8> = bits.iter().map(|bit| if bit { 1 } else { 0 }).collect();
+
+    // Hash the bytes using SHA-256
+    let mut hasher = Sha256::new();
+    hasher.update(&element_bytes);
+    let result = hasher.finalize();
+
+    let truncated_result = &result[..16]; // Take the first 16 bytes
+
+    let key = GenericArray::clone_from_slice(truncated_result);
+
+    key
 }
