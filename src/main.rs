@@ -47,7 +47,7 @@ fn main() {
 
     let ver = BLS::bls_verify(&vk, value, sign);
     println!("Verified {:?}", ver);
-
+    */
 
 
     let key = SE::generate_key(); // Generate a new key
@@ -70,7 +70,7 @@ fn main() {
     println!("Decrypted text: {}", decrypted_string);
 
     assert_eq!(key, key_again);
-    */
+    
 
     let (p1, p2) = PKE::pke_key_gen(&mut rng);
     println!("plaintext{}", p1);
