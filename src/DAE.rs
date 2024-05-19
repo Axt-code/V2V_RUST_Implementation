@@ -6,13 +6,15 @@ use aes_gcm_siv::aead::Payload;
 use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
 use aes_gcm_siv::Aes128GcmSiv; // AES-256-GCM-SIV
 use generic_array::typenum::U12;
+use pairing::bls12_381::G2;
 use rand::Rng;
 use sha2::digest::generic_array;
 use sha2::{Digest, Sha256};
 
-pub fn generate_key() -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
-    let mut rng = rand::thread_rng();
-    let key: [u8; 16] = rng.gen();
+use crate::util;
+
+pub fn generate_key(g2: G2) -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
+    let key = util::hash_g2_to_aes_key(&g2);
     GenericArray::clone_from_slice(&key)
 }
 

@@ -303,3 +303,38 @@ pub fn hash_int_to_g1(id: u128) -> G1 {
     let h = G1::one();
     mul_g1_fr(h, &id_fr)
 }
+
+pub fn convert_to_bits(bytes: &[u8]) -> BitVec {
+    let mut bits = BitVec::new();
+    for &byte in bytes {
+        for i in 0..8 {
+            bits.push((byte >> (7 - i)) & 1 == 1);
+        }
+    }
+    bits
+}
+
+pub fn g2_to_bits(g2: &G2) -> BitVec {
+    let mut bits = BitVec::new();
+    let affine = g2.into_affine();
+    let compressed = affine.into_compressed().as_ref().to_vec();
+    bits.extend(convert_to_bits(&compressed));
+    bits
+}
+
+/// Hashes an element in G2 to a GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize>
+pub fn hash_g2_to_aes_key(g2: &G2) -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
+    let bits = g2_to_bits(g2);
+    let element_bytes: Vec<u8> = bits.iter().map(|bit| if bit { 1 } else { 0 }).collect();
+
+    // Hash the bytes using SHA-256
+    let mut hasher = Sha256::new();
+    hasher.update(&element_bytes);
+    let result = hasher.finalize();
+
+    let truncated_result = &result[..16]; // Take the first 16 bytes
+
+    let key = GenericArray::clone_from_slice(truncated_result);
+
+    key
+}
