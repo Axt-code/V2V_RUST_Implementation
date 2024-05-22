@@ -33,19 +33,3 @@ pub fn decrypt(
         .decrypt(nonce, ciphertext.as_ref())
         .expect("decryption failure!")
 }
-
-pub fn key_to_int(key: &GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize>) -> u128 {
-    let mut int_key = 0u128;
-    for (i, byte) in key.iter().enumerate() {
-        int_key |= (*byte as u128) << (i * 8);
-    }
-    int_key
-}
-
-pub fn int_to_key(int_key: u128) -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
-    let mut key = [0u8; 16];
-    for i in 0..16 {
-        key[i] = (int_key >> (i * 8)) as u8;
-    }
-    GenericArray::clone_from_slice(&key)
-}

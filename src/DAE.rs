@@ -8,10 +8,10 @@ use pairing::bls12_381::G2;
 use sha2::digest::generic_array;
 use sha2::{Digest, Sha256};
 
-use crate::util;
+use crate::util::hash_g2_to_aes_key;
 
 pub fn generate_key(g2: G2) -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySize> {
-    let key = util::hash_g2_to_aes_key(&g2);
+    let key = hash_g2_to_aes_key(&g2);
     GenericArray::clone_from_slice(&key)
 }
 
@@ -19,11 +19,11 @@ pub fn generate_key(g2: G2) -> GenericArray<u8, <Aes128GcmSiv as NewAead>::KeySi
 pub fn encrypt(
     cipher: &Aes128GcmSiv,
     nonce: &GenericArray<u8, <Aes128GcmSiv as Aead>::NonceSize>,
-    Payload: &str,
+    payload: &str,
 ) -> Vec<u8> {
-    let Payload_bytes = Payload.as_bytes();
+    let payload_bytes = payload.as_bytes();
     cipher
-        .encrypt(nonce, Payload_bytes.as_ref())
+        .encrypt(nonce, payload_bytes.as_ref())
         .expect("encryption failure!")
 }
 
