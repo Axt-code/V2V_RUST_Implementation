@@ -25,13 +25,13 @@ pub fn bls_key_gen() -> (G2, Fr) {
     (vk, sk)
 }
 
-pub fn bls_sign(sk: &Fr, vid: u128, vk: G2, sete: &mut HashSet<u128>) -> Option<G1> {
+pub fn bls_sign(sk: &Fr, vid: u128, vk: &G2, sete: &mut HashSet<u128>) -> Option<G1> {
     if sete.contains(&vid) {
         println!("Error: {} is already in the set", vid);
         None
     } else {
         sete.insert(vid);
-        let mut vk_vid__vec = g2_to_vec_u128(vk);
+        let mut vk_vid__vec = g2_to_vec_u128(*vk);
         vk_vid__vec.push(vid);
         let h = hash_vec_to_g1(vk_vid__vec);
         let sig = mul_g1_fr(h, &sk);
@@ -39,7 +39,7 @@ pub fn bls_sign(sk: &Fr, vid: u128, vk: G2, sete: &mut HashSet<u128>) -> Option<
     }
 }
 
-pub fn bls_verify(pk: &G2, vid: u128, vk: G2, sign: G1) -> bool {
+pub fn bls_verify(pk: &G2, vid: u128, vk: G2, sign: &G1) -> bool {
     let g2 = G2::one();
     let mut vk_vid__vec = g2_to_vec_u128(vk);
     vk_vid__vec.push(vid);
@@ -47,5 +47,21 @@ pub fn bls_verify(pk: &G2, vid: u128, vk: G2, sign: G1) -> bool {
     let left_pair = do_pairing(&sign.into_affine(), &g2.into_affine());
     let right_pair = do_pairing(&h.into_affine(), &pk.into_affine());
 
+    left_pair == right_pair
+}
+
+pub fn bls_sign_for_e(sk: &Fr, e: u128) -> G1 {
+    let h = hash_int_to_g1(e);
+    let sig = mul_g1_fr(h, &sk);
+    sig
+}
+
+pub fn bls_verify_for_e(pk: &G2, e: u128, sign: G1) -> bool {
+    let g2 = G2::one();
+    let h = hash_int_to_g1(e);
+    let left_pair = do_pairing(&sign.into_affine(), &g2.into_affine());
+    let right_pair = do_pairing(&h.into_affine(), &pk.into_affine());
+    println!("{:?}\n", left_pair);
+    println!("{:?}\n", right_pair);
     left_pair == right_pair
 }
