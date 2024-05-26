@@ -331,6 +331,22 @@ pub fn g2_to_vec_u128(g2: G2) -> Vec<u128> {
     g2_vec
 }
 
+pub fn combine_vec_u128(vec: Vec<u128>) -> u128 {
+    // Check the length of the vector and handle accordingly
+    if vec.is_empty() {
+        return 0; // or handle as needed for an empty vector
+    } else if vec.len() == 1 {
+        return vec[0]; // Only one element, return it as is
+    }
+
+    // Combine the first two elements
+    let high = vec[0];
+    let low = vec[1];
+
+    // Shift the high part and OR with the low part
+    (high << 64) | low
+}
+
 pub fn bitvec_to_vec_u128(bits: &BitVec) -> Vec<u128> {
     let mut result = Vec::new();
     let mut chunk: u128 = 0;

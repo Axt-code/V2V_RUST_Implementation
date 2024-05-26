@@ -12,13 +12,13 @@ use rand::{SeedableRng, XorShiftRng};
 use crate::util::*;
 
 // Key generation
-pub fn bls_key_gen() -> (G2, Fr) {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+pub fn bls_key_gen(rng: &mut XorShiftRng) -> (G2, Fr) {
+    // let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let g2 = G2::one();
 
     //let mut rng = OsRng::new().unwrap();
 
-    let sk = gen_random_fr(&mut rng);
+    let sk = gen_random_fr(rng);
 
     let vk = mul_g2_fr(g2, &sk);
 
@@ -56,12 +56,12 @@ pub fn bls_sign_for_e(sk: &Fr, e: u128) -> G1 {
     sig
 }
 
-pub fn bls_verify_for_e(pk: &G2, e: u128, sign: G1) -> bool {
+pub fn bls_verify_for_e(pk: &G2, e: u128, sign: &G1) -> bool {
     let g2 = G2::one();
     let h = hash_int_to_g1(e);
     let left_pair = do_pairing(&sign.into_affine(), &g2.into_affine());
     let right_pair = do_pairing(&h.into_affine(), &pk.into_affine());
-    println!("{:?}\n", left_pair);
-    println!("{:?}\n", right_pair);
+    // println!("{:?}\n", left_pair);
+    // println!("{:?}\n", right_pair);
     left_pair == right_pair
 }

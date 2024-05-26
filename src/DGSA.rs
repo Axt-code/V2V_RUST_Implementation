@@ -10,7 +10,7 @@ use rand::{SeedableRng, XorShiftRng};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use crate::util::*;
+use crate::util::{self, *};
 
 pub fn keygen(rng: &mut XorShiftRng, k: usize) -> (G2, Fr, Fr, Fr, Fr, G2, G2, G2, G2) {
     let g2 = G2::one();
@@ -28,16 +28,16 @@ pub fn keygen(rng: &mut XorShiftRng, k: usize) -> (G2, Fr, Fr, Fr, Fr, G2, G2, G
     let Y_K1 = mul_g2_fr(g2, &y_k1);
 
     // SET
-    println!("{}", { "\nKEY GENERATION......\n" });
-    //  print_g2("g2", &g2);
-    //  print_fr("x2", &x2);
-    //  print_fr("y_id", &y_id);
-    //  print_fr("y_epoch", &y_epoch);
-    //  print_fr("y_k1", &y_k1);
-    //  print_g2("X2", &X2);
-    //  print_g2("Y_id", &Y_id);
-    //  print_g2("Y_epoch", &Y_epoch);
-    //  print_g2("Y_k1", &Y_K1);
+    // println!("{}", { "\nKEY GENERATION......\n" });
+    // print_g2("g2", &g2);
+    // print_fr("x2", &x2);
+    // print_fr("y_id", &y_id);
+    // print_fr("y_epoch", &y_epoch);
+    // print_fr("y_k1", &y_k1);
+    // print_g2("X2", &X2);
+    // print_g2("Y_id", &Y_id);
+    // print_g2("Y_epoch", &Y_epoch);
+    // print_g2("Y_k1", &Y_K1);
     (g2, x2, y_id, y_epoch, y_k1, X2, Y_id, Y_epoch, Y_K1)
 }
 pub fn issue_i<'a>(
@@ -49,6 +49,7 @@ pub fn issue_i<'a>(
     y_k1: &Fr,
     id: &u128,
     epoch: &u128,
+    ek: &G2,
     set: &mut HashMap<(u128, u128), Fr>,
 ) -> Option<((Fr, G1, G1), HashMap<(u128, u128), Fr>)> {
     let a_dash = gen_random_fr(rng);
@@ -66,6 +67,9 @@ pub fn issue_i<'a>(
     // converting id and epoch to field element
     let id_fr = int_to_fr(id);
     let epoch_fr = int_to_fr(epoch);
+    let ek_u128_vec = g2_to_vec_u128(*ek);
+    let ek_u128 = combine_vec_u128(ek_u128_vec);
+    let ek_fr = int_to_fr(&ek_u128);
 
     let mut pw = x2.clone();
     pw = add_fr_fr(pw, &mul_fr_fr(id_fr, &y_id));
@@ -76,7 +80,7 @@ pub fn issue_i<'a>(
 
     let sigma = (a_dash, h, sigma_2);
 
-    println!("{}", { "\nISSUE_I......\n" });
+    // println!("{}", { "\nISSUE_I......\n" });
     //  print_fr("a_dash", &a_dash);
     //  print_g1("h", &h);
     //  print_fr("pw", &pw);
@@ -84,10 +88,11 @@ pub fn issue_i<'a>(
 
     Some((sigma, set.clone()))
 }
-pub fn issue_u(
+pub fn issue_v(
     sigma: &(Fr, G1, G1),
     id: &u128,
     epoch: &u128,
+    ek: G2,
     X2: &G2,
     Y_id: &G2,
     Y_epoch: &G2,
@@ -98,6 +103,9 @@ pub fn issue_u(
     let (a_dash, h, sigma_2) = sigma;
     let id_fr = int_to_fr(id);
     let epoch_fr = int_to_fr(epoch);
+    let ek_u128_vec = g2_to_vec_u128(ek);
+    let ek_u128 = combine_vec_u128(ek_u128_vec);
+    let ek_fr = int_to_fr(&ek_u128);
 
     let mut XYY = X2.clone();
 
@@ -108,7 +116,7 @@ pub fn issue_u(
     let pair1 = do_pairing(&h.into_affine(), &XYY.into_affine());
     let pair2 = do_pairing(&sigma_2.into_affine(), &g2.into_affine());
 
-    println!("{}", { "\nISSUE_U......\n" });
+    // println!("{}", { "\nISSUE_U......\n" });
     //  print_g2("XYY", &XYY);
     //  print_gt("pair1", &pair1);
     //  print_gt("pair2", &pair2);
@@ -135,7 +143,8 @@ pub fn auth(
 
     let sigma_1_dash = mul_g1_fr(*sigma_1, &r);
     let sigma_2_dash = mul_g1_fr(*sigma_2, &r);
-
+    // println!("sigma_1_dash {:?}\n", sigma_1_dash);
+    // println!("sigma_2_dash {:?}\n", sigma_2_dash);
     let s_id = gen_random_fr(rng);
     let s_a_dash = gen_random_fr(rng);
 
@@ -149,7 +158,8 @@ pub fn auth(
     );
 
     let u = mul_fq12_fq12(p1, p2);
-
+    // println!("u: {:?}\n", u);
+    // println!("m: {:?}", m);
     let c = combine_to_fr(
         &u,
         &epoch_fr,
@@ -162,20 +172,26 @@ pub fn auth(
         &Y_K1,
     );
 
+    // let test0 = util::minus_fr_fr(int_to_fr(&1), &int_to_fr(&1));
+    // println!("test0: {:?}\n", test0);
+
     let vid = minus_fr_fr(s_id, &mul_fr_fr(c, &id_fr));
     let va_dash = minus_fr_fr(s_a_dash, &mul_fr_fr(c, &a_dash));
+    // println!("vid {:?}\n", vid);
+    // println!("va_dash {:?}\n", va_dash);
 
+    ////////////////////////////////////////////////////////////////////////
+
+    /////////////////////////////////////////////////////////////
     let v = (vid, va_dash);
 
     let pie = (c, v);
 
+    // println!("pie {:?}\n", pie);
     let token = (sigma_1_dash, sigma_2_dash, pie);
 
     // Output the results
-    println!("{}", { "\nAUTH......\n" });
-    //  print_g1("sigma_1_dash", &sigma_1_dash);
-    //  print_g1("sigma_2_dash", &sigma_2_dash);
-    // println!("pie: {:?}\n", pie);
+    // println!("{}", { "\nAUTH......\n" });
     token
 }
 
@@ -191,10 +207,14 @@ pub fn Vf(
     g2: &G2,
     epoch: &u128,
 ) -> bool {
+    // println!("pie {:?}\n", pie);
+    // println!("sigma_1_dash {:?}\n", sigma_1_dash);
+    // println!("sigma_2_dash {:?}\n", sigma_2_dash);
     let (c, v) = pie; // Destructure the tuple into its components
 
     let (vid, va_dash) = v;
-
+    // println!("vid {:?}\n", vid);
+    // println!("va_dash {:?}\n", va_dash);
     let epoch_fr = int_to_fr(epoch);
 
     let p1 = do_pairing(
@@ -225,9 +245,9 @@ pub fn Vf(
     );
 
     let u1 = mul_fq12_fq12(p1, mul_fq12_fq12(p2, mul_fq12_fq12(p3, p4)));
-
+    // println!("{:?}", u1);
     // println!("u1: {:?}\n", u1);
-
+    // println!("m: {:?}", m);
     let c1 = combine_to_fr(
         &u1,
         &epoch_fr,
@@ -240,10 +260,10 @@ pub fn Vf(
         &Y_K1,
     );
 
-    println!("{}", { "\nVF......\n" });
+    // println!("{}", { "\nVF......\n" });
 
-    print_fr("c", c);
-    print_fr("c1", &c1);
+    // print_fr("c", c);
+    // print_fr("c1", &c1);
     //  print_fr("c2", &c2);
 
     c == &c1
