@@ -3,14 +3,14 @@ extern crate pairing;
 extern crate rand;
 extern crate sha2;
 
-use pairing::{bls12_381::*, CurveProjective};
-use rand::{SeedableRng, XorShiftRng};
-use std::collections::{HashMap, HashSet};
-
 use crate::{
     util::{combine_vec_u128, g2_to_vec_u128, gen_random_fr, mul_g1_fr},
     DAE::decrypt,
 };
+use pairing::{bls12_381::*, CurveProjective};
+use rand::{SeedableRng, XorShiftRng};
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 mod BLS;
 mod DAE;
@@ -133,6 +133,8 @@ fn main() {
     let wid = 20;
     let (w_pk, w_sk) = BLS::bls_key_gen(&mut rng);
 
+    let start_long_term_cred = Instant::now();
+
     //2. Enroll.E(sk ℰ , st ℰ , 𝒱) upon receiving (𝒱, vk 𝒱 ):
 
     let signature_e_1 = get_signature_e(&e_sk, vid, &v_pk, &mut set_e);
@@ -180,7 +182,18 @@ fn main() {
         None => println!("Signing Failed for vehicle w\n"),
     }
 
+    let end_long_term_cred = Instant::now();
+
+    let enrollment_duration_2_vehicle = end_long_term_cred.duration_since(start_long_term_cred);
+    let enrollement_duration_1_vehicle = enrollment_duration_2_vehicle / 2;
+    println!(
+        "Time taken to get long term credential for 1 vehicle: {:?}\n",
+        enrollement_duration_1_vehicle
+    );
+
     // Authorize.V <=> Authorize.I
+
+    let start_short_term_cred = Instant::now();
     // 1. Authorize.V(cert 𝒱 , e, pk ℐ )
     let epoch = 100;
     let signature_v = BLS::bls_sign_for_e(&v_sk, epoch);
@@ -258,10 +271,21 @@ fn main() {
         &i_pk_k1,
     );
 
+    let end_short_term_cred = Instant::now();
+
+    let short_term_cred_2_vehicle = end_short_term_cred.duration_since(start_short_term_cred);
+    let short_term_cred_1_vehicle = short_term_cred_2_vehicle / 2;
+    println!(
+        "Time taken to get short term credential for 1 vehicle: {:?}\n",
+        short_term_cred_1_vehicle
+    );
+
     if let Some(cred) = cred_s_w {
         println!("\nVerification Success Cred is created for vehicle w\n",);
     }
 
+    //
+    let start_message_exchange = Instant::now();
     //ENTER
     //1. 𝒱 running Enter.V(cred 𝒱 , 𝐿𝐾 , pk ℐ , 𝑧, 𝑡, requester )
     let (v_pke_pk, v_pke_sk) = PKE::pke_key_gen(&mut rng);
@@ -374,15 +398,10 @@ fn main() {
 
     let message_v_to_w = (cipher_payload_v, nonce_payload_v, cipher_kp_v, iv_kp_v);
 
-    println!("size of payload {}\n", payload_v.len());
     let size_cipher_payload_v = message_v_to_w.0.len();
     let size_nonce_payload_v = message_v_to_w.1.len();
     let size_cipher_kp_v = message_v_to_w.2.len();
     let size_iv_kp_v = message_v_to_w.3.len();
-
-    // Calculate and print the total size
-    let total_size = size_cipher_payload_v + size_nonce_payload_v + size_cipher_kp_v + size_iv_kp_v;
-    println!("total size of message_v_to_w {}\n", total_size);
 
     let (cipher_payload_w, nonce_payload_w, cipher_kp_w, iv_kp_w) = message_v_to_w;
     let decrypted_kp = DAE::decrypt(Zpk_v, (iv_kp_w, cipher_kp_w));
@@ -391,4 +410,15 @@ fn main() {
 
     let payload_w = SE::decrypt(decrypted_kp, &nonce_payload_w, &cipher_payload_w);
     println!("payload_w: {}", payload_w);
+
+    let end_message_exchange = Instant::now();
+
+    let message_exchange_duration = end_message_exchange.duration_since(start_message_exchange);
+    println!("Time taken to exchange: {:?}\n", message_exchange_duration);
+
+    println!("size of payload {}\n", payload_v.len());
+
+    // Calculate and print the total size
+    let total_size = size_cipher_payload_v + size_nonce_payload_v + size_cipher_kp_v + size_iv_kp_v;
+    println!("total size of message_v_to_w {}\n", total_size);
 }
