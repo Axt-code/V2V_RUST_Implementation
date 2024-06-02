@@ -7,104 +7,32 @@ use crate::{
     util::{combine_vec_u128, g2_to_vec_u128, gen_random_fr, mul_g1_fr},
     DAE::decrypt,
 };
+use aes_gcm_siv::aead::Payload;
 use pairing::{bls12_381::*, CurveProjective};
-use rand::{SeedableRng, XorShiftRng};
-use std::collections::{HashMap, HashSet};
+use rand::{Rng, SeedableRng, XorShiftRng};
+use std::mem;
 use std::time::{Duration, Instant};
-
+use std::{
+    borrow::{Borrow, BorrowMut},
+    collections::{HashMap, HashSet},
+};
+use util::IAPublicKey;
+use DGSA::keygen;
 mod BLS;
 mod DAE;
 mod DGSA;
+mod EA;
+mod IA;
 mod PKE;
 mod SE;
+mod Zone;
 mod util;
+mod vehicle;
 
 // V->Vehicle
 // vid1->10
 // E->Enrollment Authority
 // epoch->100
-
-// v_pk
-
-fn get_signature_e(e_sk: &Fr, vid1: u128, v_pk: &G2, sete: &mut HashSet<u128>) -> Option<G1> {
-    let signature_e = BLS::bls_sign(&e_sk, vid1, &v_pk, sete);
-    if let Some(sig) = &signature_e {
-        println!("Signing Successful for vehicle {}\n", vid1);
-    } else {
-        println!("Signing Failed for vehicle {}\n", vid1);
-    }
-    signature_e
-}
-
-fn verify_signature_e(
-    e_pk: &G2,
-    vid: u128,
-    v_pk: &G2,
-    signature_e: &G1,
-    v_sk: &Fr,
-) -> Option<(Fr, G2, G1)> {
-    if BLS::bls_verify(e_pk, vid, *v_pk, signature_e) {
-        let cred = (v_sk.clone(), v_pk.clone(), signature_e.clone());
-        Some(cred)
-    } else {
-        None
-    }
-}
-
-fn verify_authorization(
-    e_pk: &G2,
-    vid: u128,
-    v_pk: &G2,
-    signature_e: &G1,
-    epoch: u128,
-    signature_v: &G1,
-) -> bool {
-    let check_vid_vpk = BLS::bls_verify(e_pk, vid, *v_pk, signature_e);
-    let check_e = BLS::bls_verify_for_e(v_pk, epoch, signature_v);
-
-    check_e && check_vid_vpk
-}
-
-fn perform_dgsa_issuance_and_verification(
-    rng: &mut XorShiftRng,
-    g2: &G2,
-    i_sk_x2: &Fr,
-    i_sk_yid: &Fr,
-    i_sk_epoch: &Fr,
-    i_sk_k1: &Fr,
-    vid: &u128,
-    epoch: &u128,
-    v_pk: &G2,
-    set: &mut HashMap<(u128, u128), Fr>,
-    i_pk_X2: &G2,
-    i_pk_id: &G2,
-    i_pk_epoch: &G2,
-    i_pk_k1: &G2,
-) -> Option<(u128, u128, (Fr, G1, G1))> {
-    if let Some(((a_dash_v, h_v, sigma_2_v), updated_set)) = DGSA::issue_i(
-        rng, g2, i_sk_x2, i_sk_yid, i_sk_epoch, i_sk_k1, vid, epoch, v_pk, set,
-    ) {
-        *set = updated_set;
-        let sigma_v = (a_dash_v.clone(), h_v.clone(), sigma_2_v.clone());
-        // println!("DGSA Issuance Successful");
-
-        // Perform DGSA verification
-        let result = DGSA::issue_v(
-            &sigma_v, vid, epoch, *v_pk, i_pk_X2, i_pk_id, i_pk_epoch, i_pk_k1, g2,
-        );
-        // println!("Verification result: {:?}", result);
-
-        if result {
-            Some((vid.clone(), epoch.clone(), sigma_v))
-        } else {
-            println!("Verification Failed\n");
-            None
-        }
-    } else {
-        println!("DGSA Issuance Failed: Key (id, epoch) is present in the map");
-        None
-    }
-}
 
 fn process_encryption(zpk_encryption_c1: G2, zpk_encryption_c2: G2) -> u128 {
     let zpk_encrypt_1_vec_u128 = g2_to_vec_u128(zpk_encryption_c1);
@@ -118,307 +46,155 @@ fn process_encryption(zpk_encryption_c1: G2, zpk_encryption_c2: G2) -> u128 {
 
     zpk_encrypt_u128
 }
+fn uptil_DGSA(
+    ea: &mut EA::EA,
+    ia: &mut IA::IA,
+    epoch: u128,
+    k: usize,
+    mut rng: &mut XorShiftRng,
+) -> Vec<vehicle::Veh> {
+    let mut vehicles = Vec::with_capacity(k);
+    // Create a new vehicle instance
+    let id = 10000;
 
-fn main() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    for i in 0..k {
+        let mut veh = vehicle::Veh::new();
 
-    // Enroll.V <=> Enroll.E
-    let (e_pk, e_sk) = BLS::bls_key_gen(&mut rng);
-    let mut set_e: HashSet<u128> = HashSet::new();
+        let vid = (id + (i * 10000)).try_into().unwrap();
+        veh.Veh_key_gen(&mut rng, vid);
 
-    //1. Enroll.V(pk ℰ , 𝒱):
-    let vid = 10;
-    let (v_pk, v_sk) = BLS::bls_key_gen(&mut rng);
+        let sig_e_v1 = ea.SIG_sig(veh.v_id, &veh.v_pk);
 
-    let wid = 20;
-    let (w_pk, w_sk) = BLS::bls_key_gen(&mut rng);
+        if let Some(sig) = sig_e_v1 {
+            println!("Signature: {:?}", sig);
 
-    let start_long_term_cred = Instant::now();
-
-    //2. Enroll.E(sk ℰ , st ℰ , 𝒱) upon receiving (𝒱, vk 𝒱 ):
-
-    let signature_e_1 = get_signature_e(&e_sk, vid, &v_pk, &mut set_e);
-    let signature_e_2 = get_signature_e(&e_sk, wid, &w_pk, &mut set_e);
-
-    // 3. Enroll.V upon receiving 𝜎ℰ from ℰ:
-    let mut cred_l_v: Option<(Fr, G2, G1)> = None;
-    let mut cred_l_w: Option<(Fr, G2, G1)> = None;
-
-    match signature_e_1 {
-        Some(sig) => {
-            // Call verify_signature_e to verify the generated signature
-            cred_l_v = match verify_signature_e(&e_pk, vid, &v_pk, &sig, &v_sk) {
-                Some(cred) => {
-                    println!("Verification Successful for vehicle v\n");
-                    Some(cred)
-                }
-                None => {
-                    println!("Verification Failed for vehicle v\n");
-                    None
-                }
+            // Verify the signature and print the result
+            let cert_v = veh.SIG_verify(&ea.e_pk, &sig);
+            if let Some(cert) = cert_v {
+                println!("Long term certificate for v1: {:?}\n", cert);
             }
+        } else {
+            println!("Failed to generate signature.");
         }
-        None => println!("Signing Failed for vehicle v\n"),
-    }
+        let sig_v1 = veh.SIG_sig_epoch(epoch);
 
-    // if let Some(cred) = cred1 {
-    //     println!("Credential: {:?}", cred);
-    // }
+        let is_authorized = IA::IA::verify_authorization(
+            &ea.e_pk,
+            vid.try_into().unwrap(),
+            &veh.v_pk,
+            epoch,
+            &sig_e_v1.unwrap(),
+            &sig_v1,
+        );
 
-    match signature_e_2 {
-        Some(sig) => {
-            // Call verify_signature_e to verify the generated signature
-            cred_l_w = match verify_signature_e(&e_pk, wid, &w_pk, &sig, &w_sk) {
-                Some(cred) => {
-                    println!("Verification Successful for vehicle w\n");
-                    Some(cred)
-                }
-                None => {
-                    println!("Verification Failed for vehicle w\n");
-                    None
-                }
-            }
+        if is_authorized {
+            println!("Authorization successful");
+        } else {
+            println!("Authorization failed");
         }
-        None => println!("Signing Failed for vehicle w\n"),
+
+        let sigma_v1 = ia.compute_sigma(&mut rng, vid, epoch);
+
+        let cred_v1 = veh.get_cred(&sigma_v1.unwrap(), &ia.IAPublicKey, epoch);
+
+        println!("cred_v1 {:?}\n", cred_v1);
+        vehicles.push(veh);
     }
 
-    let end_long_term_cred = Instant::now();
+    vehicles
+}
 
-    let enrollment_duration_2_vehicle = end_long_term_cred.duration_since(start_long_term_cred);
-    let enrollement_duration_1_vehicle = enrollment_duration_2_vehicle / 2;
-    println!(
-        "Time taken to get long term credential for 1 vehicle: {:?}\n",
-        enrollement_duration_1_vehicle
-    );
+fn after_DGSA(
+    veh1: &mut vehicle::Veh,
+    veh2: &mut vehicle::Veh,
+    ia: &mut IA::IA,
+    epoch: u128,
+    mut rng: &mut XorShiftRng,
+) {
+    // //ENTER
+    // //1. 𝒱 running Enter.V(cred 𝒱 , 𝐿𝐾 , pk ℐ , 𝑧, 𝑡, requester )
+    let (v_pke_ek, v_pke_dk) = veh1.Vehicle_PKE_Key_gen(&mut rng);
 
-    // Authorize.V <=> Authorize.I
+    let (token_v, m) = veh1.generate_token_m(&mut rng, &ia.IAPublicKey, true, 0);
 
-    let start_short_term_cred = Instant::now();
-    // 1. Authorize.V(cert 𝒱 , e, pk ℐ )
-    let epoch = 100;
-    let signature_v = BLS::bls_sign_for_e(&v_sk, epoch);
-    let signature_w = BLS::bls_sign_for_e(&w_sk, epoch);
+    println!("Token: is generated for vehicle v\n",);
 
-    // // 2. Authorize.I(sk 𝐼 , st ℐ , 𝒱, e, pk ℰ )
-    if verify_authorization(
-        &e_pk,
-        vid,
-        &v_pk,
-        &signature_e_1.unwrap(),
-        epoch,
-        &signature_v,
-    ) {
-        println!("Authorization verified for vehicle v\n");
-    } else {
-        println!("Authorization failed for vehicle v\n");
-    }
+    // //FOR vehicle v2
 
-    if verify_authorization(
-        &e_pk,
-        wid,
-        &w_pk,
-        &signature_e_2.unwrap(),
-        epoch,
-        &signature_w,
-    ) {
-        println!("Authorization verified for vehicle w\n");
-    } else {
-        println!("Authorization failed for vehicle w\n");
-    }
+    // //2. 𝒲𝑖 running Enter.W(cred 𝒲𝑖 , 𝐿𝐾𝑖 , pk ℐ , 𝑧, 𝑡, responder 𝑖 ) upon receiving (𝑧,𝑡, ek , tok 𝒱 ) from a vehicle 𝒱:
 
-    // DGSA Key generation.
-    let attribute = 1;
-    let (g2, i_sk_x2, i_sk_yid, i_sk_epoch, i_sk_k1, i_pk_X2, i_pk_id, i_pk_epoch, i_pk_k1) =
-        DGSA::keygen(&mut rng, attribute);
-    let mut set_i: HashMap<(u128, u128), Fr> = HashMap::new();
+    let is_valid_token_v = vehicle::Veh::verify_token(token_v, &ia.IAPublicKey, m, epoch);
 
-    // // DGSA ℐ and 𝒱 run the issuance protocol of DGSA
-    let cred_s_v = perform_dgsa_issuance_and_verification(
-        &mut rng,
-        &g2,
-        &i_sk_x2,
-        &i_sk_yid,
-        &i_sk_epoch,
-        &i_sk_k1,
-        &vid,
-        &epoch,
-        &v_pk,
-        &mut set_i,
-        &i_pk_X2,
-        &i_pk_id,
-        &i_pk_epoch,
-        &i_pk_k1,
-    );
+    println!("For vehicke v token is valid: {}\n", is_valid_token_v);
 
-    if let Some(cred) = cred_s_v {
-        println!("\nVerification Success Cred is created for vehicle v\n",);
-    }
+    let mut Zone1 = Zone::Zone::new();
+    let zid1 = 1234;
+    let zone_pre_sk = Zone1.Zone_key_gen(&mut rng, zid1);
 
-    let cred_s_w = perform_dgsa_issuance_and_verification(
-        &mut rng,
-        &g2,
-        &i_sk_x2,
-        &i_sk_yid,
-        &i_sk_epoch,
-        &i_sk_k1,
-        &wid,
-        &epoch,
-        &w_pk,
-        &mut set_i,
-        &i_pk_X2,
-        &i_pk_id,
-        &i_pk_epoch,
-        &i_pk_k1,
-    );
+    let Zpk_sk_v2 = Zone1.generate_zone_sk_key(zone_pre_sk);
+    println!("zpk_sk_v2 {:?}\n", Zpk_sk_v2);
 
-    let end_short_term_cred = Instant::now();
-
-    let short_term_cred_2_vehicle = end_short_term_cred.duration_since(start_short_term_cred);
-    let short_term_cred_1_vehicle = short_term_cred_2_vehicle / 2;
-    println!(
-        "Time taken to get short term credential for 1 vehicle: {:?}\n",
-        short_term_cred_1_vehicle
-    );
-
-    if let Some(cred) = cred_s_w {
-        println!("\nVerification Success Cred is created for vehicle w\n",);
-    }
-
-    //
-    let start_message_exchange = Instant::now();
-    //ENTER
-    //1. 𝒱 running Enter.V(cred 𝒱 , 𝐿𝐾 , pk ℐ , 𝑧, 𝑡, requester )
-    let (v_pke_pk, v_pke_sk) = PKE::pke_key_gen(&mut rng);
-
-    let (cred_vid, cred_vepoch, sigma_v) = cred_s_v.unwrap();
-    let v_pke_pk_u128_vec = util::g2_to_vec_u128(v_pke_pk);
-    let v_pke_pk_u128 = util::combine_vec_u128(v_pke_pk_u128_vec);
-
-    let m_v = cred_vid + cred_vepoch + v_pke_pk_u128;
-
-    let token_v = DGSA::auth(
-        &mut rng,
-        &m_v,
-        &sigma_v,
-        &cred_vid,
-        &cred_vepoch,
-        &i_pk_X2,
-        &i_pk_id,
-        &i_pk_epoch,
-        &i_pk_k1,
-        &g2,
-    );
-
-    // println!("Token: is generated for vehicle v\n",);
-
-    //FOR vehicle w
-
-    //2. 𝒲𝑖 running Enter.W(cred 𝒲𝑖 , 𝐿𝐾𝑖 , pk ℐ , 𝑧, 𝑡, responder 𝑖 ) upon receiving (𝑧,𝑡, ek , tok 𝒱 ) from a vehicle 𝒱:
-
-    let (sigma_v1_dash, sigma_v2_dash, pie_v) = token_v;
-    let is_valid_w = DGSA::Vf(
-        &sigma_v1_dash,
-        &sigma_v2_dash,
-        &pie_v,
-        &i_pk_X2,
-        &i_pk_epoch,
-        &i_pk_id,
-        &i_pk_k1,
-        m_v,
-        &g2,
-        &cred_vepoch,
-    );
-
-    println!("For vehicke v token is valid: {}\n", is_valid_w);
-
-    let z1 = 1000;
-
-    // generating secret key for Zone.
-    let z1_sk = gen_random_fr(&mut rng);
-    let g = G2::one();
-    let z1_sk_g2_w = util::mul_g2_fr(g, &z1_sk);
-
-    let Zpk_w = DAE::generate_key(z1_sk_g2_w);
-    // println!("zpk_w {:?}\n", Zpk_w);
-    let (zpk_encrypted_c1, zpk_encrypted_c2) = PKE::pke_encrypt(&mut rng, v_pke_pk, z1_sk_g2_w);
+    let (zpk_encrypted_c1, zpk_encrypted_c2) =
+        vehicle::Veh::Zone_sk_PKE_encryption(&mut rng, v_pke_ek, &zone_pre_sk);
 
     let zpk_encrypt_ct = process_encryption(zpk_encrypted_c1, zpk_encrypted_c2);
 
-    let (cred_wid, cred_wepoch, sigma_w) = cred_s_w.unwrap();
-    let m_w = cred_wid + cred_wepoch + zpk_encrypt_ct;
+    let (token_v2, m1) = veh2.generate_token_m(&mut rng, &ia.IAPublicKey, false, zpk_encrypt_ct);
 
-    let token_w = DGSA::auth(
-        &mut rng,
-        &m_w,
-        &sigma_w,
-        &cred_wid,
-        &cred_wepoch,
-        &i_pk_X2,
-        &i_pk_id,
-        &i_pk_epoch,
-        &i_pk_k1,
-        &g2,
-    );
+    // // 3.Vehicle 𝒱 upon receiving (𝑧, 𝑡, ct, tok 𝒲 ) from a vehicle 𝒲𝑖 :
 
-    // 3.Vehicle 𝒱 upon receiving (𝑧, 𝑡, ct, tok 𝒲 ) from a vehicle 𝒲𝑖 :
+    let is_valid_token_v2 = vehicle::Veh::verify_token(token_v2, &ia.IAPublicKey, m1, epoch);
 
-    let (sigma_w1_dash, sigma_w2_dash, pie_w) = token_w;
-    let is_valid_w = DGSA::Vf(
-        &sigma_w1_dash,
-        &sigma_w2_dash,
-        &pie_w,
-        &i_pk_X2,
-        &i_pk_epoch,
-        &i_pk_id,
-        &i_pk_k1,
-        m_w,
-        &g2,
-        &cred_wepoch,
-    );
+    println!("For vehicke v2 token is valid: {}\n", is_valid_token_v2);
 
-    println!("For vehicke w token is valid: {}\n", is_valid_w);
+    let zone_pre_sk_v =
+        vehicle::Veh::Zone_sk_PKE_decryption(v_pke_dk, zpk_encrypted_c1, zpk_encrypted_c2);
+    println!("zone_pre_sk: {}\n", { zone_pre_sk });
+    println!("zone_pre_sk_w {}\n", { zone_pre_sk_v });
 
-    let z1_sk_g2_v = PKE::pke_decrypt(&v_pke_sk, (zpk_encrypted_c1, zpk_encrypted_c2));
-    let Zpk_v = DAE::generate_key(z1_sk_g2_v);
-    // println!("zpk_v {:?}\n", Zpk_v);
+    let Zpk_sk_v = Zone1.generate_zone_sk_key(zone_pre_sk_v);
+    println!("zpk_sk_v {:?}\n", Zpk_sk_v);
 
-    ////Sending and Receiving Payloads.
+    // ////Sending and Receiving Payloads.
 
-    // Send(𝐿𝐾 , P , 𝑌 ⊆ 𝑍, 𝑡) :
-    let kp = SE::generate_key();
-    // println!("before encryption kp {:?}\n", kp);
-    let payload_v = "12345678";
-    println!("payload_v: {}\n", payload_v);
-    let (cipher_payload_v, nonce_payload_v) = SE::encrypt(kp, payload_v);
+    // // Send(𝐿𝐾 , P , 𝑌 ⊆ 𝑍, 𝑡) :
+    let payload_v = "123456789";
+    let kp = vehicle::Veh::SE_Key_gen(&mut rng);
+    let (cipher_payload_v, nonce_payload_v) = vehicle::Veh::SE_encryption(payload_v, kp);
 
-    // let bytes: Vec<u8> = kp.as_slice().to_vec();
-    // println!("bytes {:?}", bytes);
+    let (cipher_kp_v, iv_kp_v) = vehicle::Veh::DAE_encryption(Zpk_sk_v, kp);
 
-    let (cipher_kp_v, iv_kp_v) = DAE::encrypt(Zpk_v, kp);
+    let message_v1_to_v2 = (cipher_payload_v, nonce_payload_v, cipher_kp_v, iv_kp_v);
 
-    let message_v_to_w = (cipher_payload_v, nonce_payload_v, cipher_kp_v, iv_kp_v);
+    //##################################################################
 
-    let size_cipher_payload_v = message_v_to_w.0.len();
-    let size_nonce_payload_v = message_v_to_w.1.len();
-    let size_cipher_kp_v = message_v_to_w.2.len();
-    let size_iv_kp_v = message_v_to_w.3.len();
+    let (cipher_payload_v2, nonce_payload_v2, cipher_kp_v2, iv_kp_v2) = message_v1_to_v2;
 
-    let (cipher_payload_w, nonce_payload_w, cipher_kp_w, iv_kp_w) = message_v_to_w;
-    let decrypted_kp = DAE::decrypt(Zpk_v, (iv_kp_w, cipher_kp_w));
+    let decrypted_kp = vehicle::Veh::DAE_decryption(Zpk_sk_v2, (iv_kp_v2, cipher_kp_v2));
 
-    // println!("decrypted_kp {:?}\n", decrypted_kp);
-
-    let payload_w = SE::decrypt(decrypted_kp, &nonce_payload_w, &cipher_payload_w);
+    // // println!("decrypted_kp {:?}\n", decrypted_kp);
+    let payload_w =
+        vehicle::Veh::SE_decryption(decrypted_kp, &nonce_payload_v2, &cipher_payload_v2);
     println!("payload_w: {}", payload_w);
+}
+fn main() {
+    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    let end_message_exchange = Instant::now();
+    let mut ea = EA::EA::new();
+    ea.EA_key_gen(rng.borrow_mut());
 
-    let message_exchange_duration = end_message_exchange.duration_since(start_message_exchange);
-    println!("Time taken to exchange: {:?}\n", message_exchange_duration);
+    let mut ia = IA::IA::new();
+    ia.IA_key_gen(&mut rng);
+    let epoch = 100;
+    let no_of_vehicles = 5;
+    let mut vehicles = uptil_DGSA(&mut ea, &mut ia, epoch, no_of_vehicles, &mut rng);
 
-    println!("size of payload {}\n", payload_v.len());
-
-    // Calculate and print the total size
-    let total_size = size_cipher_payload_v + size_nonce_payload_v + size_cipher_kp_v + size_iv_kp_v;
-    println!("total size of message_v_to_w {}\n", total_size);
+    if vehicles.len() >= 2 {
+        let (first, rest) = vehicles.split_at_mut(1);
+        let veh1 = &mut first[0];
+        let veh2 = &mut rest[0];
+        after_DGSA(veh1, veh2, &mut ia, epoch, &mut rng);
+    } else {
+        println!("Not enough vehicles to process.");
+    }
 }

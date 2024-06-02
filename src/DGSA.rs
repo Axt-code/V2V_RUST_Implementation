@@ -11,8 +11,9 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::util::{self, *};
+use crate::IA;
 
-pub fn keygen(rng: &mut XorShiftRng, k: usize) -> (G2, Fr, Fr, Fr, Fr, G2, G2, G2, G2) {
+pub fn keygen(rng: &mut XorShiftRng, k: usize) -> (Fr, Fr, Fr, Fr, G2, G2, G2, G2, G2) {
     let g2 = G2::one();
 
     // sk
@@ -38,18 +39,13 @@ pub fn keygen(rng: &mut XorShiftRng, k: usize) -> (G2, Fr, Fr, Fr, Fr, G2, G2, G
     // print_g2("Y_id", &Y_id);
     // print_g2("Y_epoch", &Y_epoch);
     // print_g2("Y_k1", &Y_K1);
-    (g2, x2, y_id, y_epoch, y_k1, X2, Y_id, Y_epoch, Y_K1)
+    (x2, y_id, y_epoch, y_k1, X2, Y_id, Y_epoch, Y_K1, g2)
 }
 pub fn issue_i<'a>(
     rng: &mut XorShiftRng,
-    g2: &G2,
-    x2: &Fr,
-    y_id: &Fr,
-    y_epoch: &Fr,
-    y_k1: &Fr,
+    IASecretKey: &IASecretKey,
     id: &u128,
     epoch: &u128,
-    ek: &G2,
     set: &mut HashMap<(u128, u128), Fr>,
 ) -> Option<((Fr, G1, G1), HashMap<(u128, u128), Fr>)> {
     let a_dash = gen_random_fr(rng);
@@ -67,14 +63,11 @@ pub fn issue_i<'a>(
     // converting id and epoch to field element
     let id_fr = int_to_fr(id);
     let epoch_fr = int_to_fr(epoch);
-    let ek_u128_vec = g2_to_vec_u128(*ek);
-    let ek_u128 = combine_vec_u128(ek_u128_vec);
-    let ek_fr = int_to_fr(&ek_u128);
 
-    let mut pw = x2.clone();
-    pw = add_fr_fr(pw, &mul_fr_fr(id_fr, &y_id));
-    pw = add_fr_fr(pw, &mul_fr_fr(epoch_fr, &y_epoch));
-    pw = add_fr_fr(pw, &mul_fr_fr(a_dash, y_k1));
+    let mut pw = IASecretKey.sk_x2.clone();
+    pw = add_fr_fr(pw, &mul_fr_fr(id_fr, &IASecretKey.sk_id));
+    pw = add_fr_fr(pw, &mul_fr_fr(epoch_fr, &IASecretKey.sk_epoch));
+    pw = add_fr_fr(pw, &mul_fr_fr(a_dash, &IASecretKey.sk_k1));
 
     let sigma_2 = mul_g1_fr(h, &pw);
 
@@ -93,28 +86,22 @@ pub fn issue_v(
     id: &u128,
     epoch: &u128,
     ek: G2,
-    X2: &G2,
-    Y_id: &G2,
-    Y_epoch: &G2,
-    Y_K1: &G2,
-    g2: &G2,
+    IAPublicKey: &IAPublicKey,
 ) -> bool {
     // converting id and epoch to field element
     let (a_dash, h, sigma_2) = sigma;
     let id_fr = int_to_fr(id);
     let epoch_fr = int_to_fr(epoch);
-    let ek_u128_vec = g2_to_vec_u128(ek);
-    let ek_u128 = combine_vec_u128(ek_u128_vec);
-    let ek_fr = int_to_fr(&ek_u128);
+    let ek_u128_vec = convert_g2_to_fr(&ek);
 
-    let mut XYY = X2.clone();
+    let mut XYY = IAPublicKey.pk_X2.clone();
 
-    XYY = add_g2_g2(XYY, mul_g2_fr(*Y_id, &id_fr));
-    XYY = add_g2_g2(XYY, mul_g2_fr(*Y_epoch, &epoch_fr));
-    XYY = add_g2_g2(XYY, mul_g2_fr(*Y_K1, a_dash));
+    XYY = add_g2_g2(XYY, mul_g2_fr(IAPublicKey.pk_id, &id_fr));
+    XYY = add_g2_g2(XYY, mul_g2_fr(IAPublicKey.pk_epoch, &epoch_fr));
+    XYY = add_g2_g2(XYY, mul_g2_fr(IAPublicKey.pk_K1, a_dash));
 
     let pair1 = do_pairing(&h.into_affine(), &XYY.into_affine());
-    let pair2 = do_pairing(&sigma_2.into_affine(), &g2.into_affine());
+    let pair2 = do_pairing(&sigma_2.into_affine(), &IAPublicKey.g2.into_affine());
 
     // println!("{}", { "\nISSUE_U......\n" });
     //  print_g2("XYY", &XYY);
@@ -129,11 +116,7 @@ pub fn auth(
     sigma: &(Fr, G1, G1),
     id: &u128,
     epoch: &u128,
-    X2: &G2,
-    Y_id: &G2,
-    Y_epoch: &G2,
-    Y_K1: &G2,
-    g2: &G2,
+    IAPublicKey: &IAPublicKey,
 ) -> (G1, G1, (Fr, (Fr, Fr))) {
     let (a_dash, sigma_1, sigma_2) = sigma;
     let id_fr = int_to_fr(id);
@@ -150,11 +133,11 @@ pub fn auth(
 
     let p1 = do_pairing(
         &mul_g1_fr(sigma_1_dash, &s_id).into_affine(),
-        &Y_id.into_affine(),
+        &IAPublicKey.pk_id.into_affine(),
     );
     let p2 = do_pairing(
         &mul_g1_fr(sigma_1_dash, &s_a_dash).into_affine(),
-        &Y_K1.into_affine(),
+        &IAPublicKey.pk_K1.into_affine(),
     );
 
     let u = mul_fq12_fq12(p1, p2);
@@ -166,10 +149,10 @@ pub fn auth(
         &m,
         &sigma_1_dash,
         &sigma_2_dash,
-        &X2,
-        &Y_epoch,
-        &Y_id,
-        &Y_K1,
+        &IAPublicKey.pk_X2,
+        &IAPublicKey.pk_epoch,
+        &IAPublicKey.pk_id,
+        &IAPublicKey.pk_K1,
     );
 
     // let test0 = util::minus_fr_fr(int_to_fr(&1), &int_to_fr(&1));
@@ -199,12 +182,8 @@ pub fn Vf(
     sigma_1_dash: &G1,
     sigma_2_dash: &G1,
     pie: &(Fr, (Fr, Fr)),
-    X2: &G2,
-    Y_epoch: &G2,
-    Y_id: &G2,
-    Y_K1: &G2,
+    IAPublicKey: IAPublicKey,
     m: u128,
-    g2: &G2,
     epoch: &u128,
 ) -> bool {
     // println!("pie {:?}\n", pie);
@@ -219,25 +198,25 @@ pub fn Vf(
 
     let p1 = do_pairing(
         &mul_g1_fr(*sigma_1_dash, &vid).into_affine(),
-        &Y_id.into_affine(),
+        &IAPublicKey.pk_id.into_affine(),
     );
 
     let p2 = do_pairing(
         &mul_g1_fr(*sigma_1_dash, &va_dash).into_affine(),
-        &Y_K1.into_affine(),
+        &IAPublicKey.pk_K1.into_affine(),
     );
 
     let p3 = do_pairing(
         &mul_g1_fr(*sigma_2_dash, &c).into_affine(),
-        &g2.into_affine(),
+        &IAPublicKey.g2.into_affine(),
     );
 
     // let inv: u128 = -1;
-    let mut XY_inverse = mul_g2_fr(*X2, &int_to_fr_negate(&1));
+    let mut XY_inverse = mul_g2_fr(IAPublicKey.pk_X2, &int_to_fr_negate(&1));
 
     let mut epoch_neg = epoch_fr.clone();
     epoch_neg.negate();
-    XY_inverse = add_g2_g2(XY_inverse, mul_g2_fr(*Y_epoch, &epoch_neg));
+    XY_inverse = add_g2_g2(XY_inverse, mul_g2_fr(IAPublicKey.pk_epoch, &epoch_neg));
 
     let p4 = do_pairing(
         &mul_g1_fr(*sigma_1_dash, &c).into_affine(),
@@ -254,10 +233,10 @@ pub fn Vf(
         &m,
         &sigma_1_dash,
         &sigma_2_dash,
-        &X2,
-        &Y_epoch,
-        &Y_id,
-        &Y_K1,
+        &IAPublicKey.pk_X2,
+        &IAPublicKey.pk_epoch,
+        &IAPublicKey.pk_id,
+        &IAPublicKey.pk_K1,
     );
 
     // println!("{}", { "\nVF......\n" });

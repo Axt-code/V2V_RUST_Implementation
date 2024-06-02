@@ -375,3 +375,31 @@ pub fn bitvec_to_vec_u128(bits: &BitVec) -> Vec<u128> {
 
     result
 }
+
+pub fn convert_g2_to_fr(ek: &G2) -> Fr {
+    let ek_u128_vec = g2_to_vec_u128(*ek);
+    let ek_u128 = combine_vec_u128(ek_u128_vec);
+    int_to_fr(&ek_u128)
+}
+
+#[derive(Clone, Debug)]
+pub struct CertV {
+    pub sk: Fr,
+    pub pk: G2,
+    pub sig_e: G1,
+}
+#[derive(Clone, Debug)]
+pub struct IASecretKey {
+    pub sk_x2: Fr,
+    pub sk_id: Fr,
+    pub sk_epoch: Fr,
+    pub sk_k1: Fr,
+}
+#[derive(Clone, Debug, Copy)]
+pub struct IAPublicKey {
+    pub pk_X2: G2,
+    pub pk_id: G2,
+    pub pk_epoch: G2,
+    pub pk_K1: G2,
+    pub g2: G2,
+}
