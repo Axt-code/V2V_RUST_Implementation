@@ -15,6 +15,7 @@ use sha2::digest::generic_array::GenericArray;
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
 use std::time::{Duration, Instant};
+use std::vec;
 
 pub fn do_pairing(g_1: &G1Affine, g_2: &G2Affine) -> Fq12 {
     Bls12::final_exponentiation(&Bls12::miller_loop([&(
@@ -78,6 +79,12 @@ pub fn minus_fr_fr(a: Fr, b: &Fr) -> Fr {
 pub fn add_g1_g1(a: G1, b: G1) -> G1 {
     let mut r = &mut a.clone();
     r.add_assign(&b);
+    return *r;
+}
+
+pub fn minus_g1_g1(a: G1, b: G1) -> G1 {
+    let mut r = &mut a.clone();
+    r.sub_assign(&b);
     return *r;
 }
 
@@ -382,6 +389,42 @@ pub fn convert_g2_to_fr(ek: &G2) -> Fr {
     int_to_fr(&ek_u128)
 }
 
+pub fn Hash_into_Fr(commit: G1, Y: Vec<G1>) -> (Fr) {
+    let mut combined_bits = BitVec::new();
+
+    combined_bits.extend(g1_to_bits(&commit));
+
+    for i in Y {
+        combined_bits.extend(g1_to_bits(&i));
+    }
+
+    let combined_bytes = combined_bits.to_bytes();
+
+    let mut hasher = Sha256::new();
+    hasher.update(&combined_bytes);
+    let hash_result = hasher.finalize();
+
+    assert!(
+        hash_result.len() == 32,
+        "Hash result should be 32 bytes long"
+    );
+
+    let mut repr = [0u64; 4];
+    for (i, chunk) in hash_result.chunks(8).enumerate() {
+        repr[i] = u64::from_le_bytes(chunk.try_into().expect("Chunk should be 8 bytes long"));
+    }
+
+    let mut combined_fr = Fr::zero();
+    for &value in repr.iter() {
+        let fr_repr = FrRepr::from(value);
+        let fr_value = Fr::from_repr(fr_repr).expect("Value is not a valid field element");
+
+        combined_fr.add_assign(&fr_value);
+    }
+
+    combined_fr
+}
+
 #[derive(Clone, Debug)]
 pub struct CertV {
     pub sk: Fr,
@@ -402,4 +445,16 @@ pub struct IAPublicKey {
     pub pk_epoch: G2,
     pub pk_K1: G2,
     pub g2: G2,
+}
+
+pub struct PS_sk {
+    pub X: G1,
+}
+#[derive(Clone, Debug)]
+pub struct PS_pk {
+    pub g: G1,
+    pub g_dash: G2,
+    pub Y: Vec<G1>,
+    pub X_dash: G2,
+    pub Y_dash: Vec<G2>,
 }
